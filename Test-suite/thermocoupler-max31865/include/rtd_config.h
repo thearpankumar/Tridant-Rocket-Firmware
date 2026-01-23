@@ -53,12 +53,10 @@
 
 // Reference resistor value (must match your board)
 // PT100 boards typically have 430 ohm, PT1000 boards have 4300 ohm
+// NOTE: Some boards use 4300 ohm even with PT100 sensors!
 #ifndef RTD_RREF
-    #if RTD_TYPE == 100
-        #define RTD_RREF 430.0
-    #else
-        #define RTD_RREF 4300.0
-    #endif
+    // Check the resistor on your board: 431 = 430 ohm, 4301 = 4300 ohm
+    #define RTD_RREF 4300.0  // Change to 430.0 if your board has 431 resistor
 #endif
 
 // RTD nominal resistance at 0°C
@@ -71,7 +69,7 @@
 // 3 = 3-wire RTD (most common)
 // 4 = 4-wire RTD (highest accuracy)
 #ifndef RTD_WIRES
-    #define RTD_WIRES 3
+    #define RTD_WIRES 4  // 4-wire for highest accuracy
 #endif
 
 // ===== Wiring Guide =====

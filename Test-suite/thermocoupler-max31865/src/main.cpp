@@ -299,11 +299,11 @@ void printWiringGuide() {
     Serial.println(MAX31865_CS_PIN);
     Serial.println();
 
-    Serial.println(F("RTD to MAX31865 (3-Wire):"));
-    Serial.println(F("  Wire 1 -> RTD+"));
-    Serial.println(F("  Wire 2 -> RTD-"));
-    Serial.println(F("  Wire 3 -> F-"));
-    Serial.println(F("(Check board docs for jumper config!)"));
+    Serial.println(F("RTD to MAX31865 (4-Wire):"));
+    Serial.println(F("  Red wire 1  -> F+"));
+    Serial.println(F("  Red wire 2  -> RTD+"));
+    Serial.println(F("  Blue wire 1 -> F-"));
+    Serial.println(F("  Blue wire 2 -> RTD-"));
     Serial.println();
 }
 
