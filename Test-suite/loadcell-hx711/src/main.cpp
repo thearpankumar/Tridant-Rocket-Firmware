@@ -1,371 +1,309 @@
 #include "LoadCellModule.h"
 #include "loadcell_config.h"
 #include <Arduino.h>
-#include <math.h>
-
-// ===== Operating Mode =====
-// Set to true to run calibration mode, false for normal operation
-#define CALIBRATION_MODE true
-
-// Known weight for calibration (in grams)
-#define KNOWN_WEIGHT 6200.0
 
 // ===== Global Objects =====
 LoadCellModule loadCell;
 
-// ===== Timing Variables =====
-unsigned long lastDisplayTime = 0;
-unsigned long lastStabilityTime = 0;
+// ===== Timing =====
+unsigned long startTime = 0;
+bool outputEnabled = true;
 
 // ===== Function Prototypes =====
-void runNormalMode();
-void runCalibrationMode();
-void displayWeight();
-void displayStabilityStatus();
-void printSeparator();
-void printWiringGuide();
+void printHelp();
+void handleSerialCommands();
 
 void setup() {
-  // Initialize Serial Monitor
-  Serial.begin(SERIAL_BAUD);
-  delay(1500);
+    Serial.begin(SERIAL_BAUD);
+    delay(500);
 
-  // Print banner
-  printSeparator();
-  Serial.println(F("  HX711 Load Cell Test"));
-  Serial.println(F("  ESP32 Dev Board"));
-  printSeparator();
-  Serial.print(F("Board: "));
-  Serial.println(BOARD_NAME);
-  Serial.println();
+    // Minimal startup banner
+    Serial.println();
+    Serial.println(F("# =========================================="));
+    Serial.println(F("# HX711 Thrust Test - 80Hz High-Speed Mode"));
+    Serial.println(F("# =========================================="));
+    Serial.print(F("# Board: "));
+    Serial.println(BOARD_NAME);
+    Serial.print(F("# Calibration Factor: "));
+    Serial.println(CALIBRATION_FACTOR, 3);
+    Serial.println(F("#"));
+    Serial.println(F("# IMPORTANT: Ensure HX711 RATE pin is HIGH for 80Hz!"));
+    Serial.println(F("#"));
 
-  // Print wiring guide
-  printWiringGuide();
+    // Initialize load cell
+    Serial.println(F("# Initializing HX711..."));
 
-  // Initialize load cell
-  Serial.println(F("Initializing HX711..."));
-  Serial.print(F("DOUT Pin: GPIO"));
-  Serial.println(LOADCELL_DOUT_PIN);
-  Serial.print(F("SCK Pin:  GPIO"));
-  Serial.println(LOADCELL_SCK_PIN);
-  Serial.println();
-
-  if (!loadCell.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN,
-                      CALIBRATION_FACTOR)) {
-    Serial.println(F("\nFATAL: HX711 initialization failed!"));
-    Serial.println(F("Check wiring:"));
-    Serial.println(F("  - Is HX711 powered? (VCC -> 3.3V)"));
-    Serial.println(F("  - Are data pins connected correctly?"));
-    Serial.println(F("  - Is load cell wired to HX711?"));
-    Serial.println(F("System halted."));
-    while (1) {
-      delay(1000);
+    if (!loadCell.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN, CALIBRATION_FACTOR)) {
+        Serial.println(F("# FATAL: HX711 initialization failed!"));
+        Serial.println(F("# Check wiring:"));
+        Serial.println(F("#   HX711 VCC  -> 3.3V"));
+        Serial.println(F("#   HX711 GND  -> GND"));
+        Serial.print(F("#   HX711 DT   -> GPIO"));
+        Serial.println(LOADCELL_DOUT_PIN);
+        Serial.print(F("#   HX711 SCK  -> GPIO"));
+        Serial.println(LOADCELL_SCK_PIN);
+        Serial.println(F("# System halted."));
+        while (1) {
+            delay(1000);
+        }
     }
-  }
 
-  Serial.println(F("HX711 initialized successfully!"));
-  Serial.println();
+    Serial.println(F("# HX711 OK"));
+    Serial.println(F("#"));
+    Serial.println(F("# Taring... ensure NO load on sensor!"));
+    delay(1000);
+    loadCell.tare(TARE_READINGS);
+    Serial.println(F("# Tare complete."));
+    Serial.println(F("#"));
 
-  // Configure stability detection
-  loadCell.setStabilityThreshold(STABILITY_THRESHOLD);
-  loadCell.setStabilitySamples(STABILITY_SAMPLES);
+    printHelp();
 
-#if CALIBRATION_MODE
-  Serial.println(F("=== CALIBRATION MODE ==="));
-  Serial.println(F("Follow the instructions to calibrate your load cell."));
-#else
-  Serial.print(F("Calibration Factor: "));
-  Serial.println(CALIBRATION_FACTOR);
-  Serial.println();
+    Serial.println(F("#"));
+    Serial.println(F("# Starting data output..."));
+    Serial.println(F("# timestamp_ms,force_N"));
 
-  // Tare the scale
-  Serial.println(F("Taring scale... Remove all weight!"));
-  delay(2000);
-  loadCell.tare(TARE_READINGS);
-  Serial.println(F("Tare complete!"));
-#endif
-
-  printSeparator();
-  Serial.println();
+    startTime = millis();
 }
 
 void loop() {
-#if CALIBRATION_MODE
-  runCalibrationMode();
-#else
-  runNormalMode();
-#endif
+    // Handle serial commands (non-blocking)
+    handleSerialCommands();
+
+    // Read and output at maximum rate (80Hz = ~12.5ms per sample)
+    if (outputEnabled) {
+        ThrustData data;
+        if (loadCell.readIfReady(data) && data.valid) {
+            // CSV output: timestamp_ms,force_N
+            unsigned long relativeTime = data.timestamp - startTime;
+            Serial.print(relativeTime);
+            Serial.print(',');
+            Serial.println(data.forceNewtons, 3);
+        }
+    }
 }
 
-void runNormalMode() {
-  // Update load cell data
-  loadCell.update();
+void handleSerialCommands() {
+    if (!Serial.available()) return;
 
-  unsigned long currentTime = millis();
-
-  // Display weight at regular intervals
-  if (currentTime - lastDisplayTime >= DISPLAY_INTERVAL) {
-    lastDisplayTime = currentTime;
-    displayWeight();
-  }
-
-  // Display stability status periodically
-  if (currentTime - lastStabilityTime >= STABILITY_INTERVAL) {
-    lastStabilityTime = currentTime;
-    displayStabilityStatus();
-  }
-
-  // Check for serial commands
-  if (Serial.available()) {
     char cmd = Serial.read();
+
     switch (cmd) {
-    case 't':
-    case 'T':
-      Serial.println(F("\nTaring... Remove all weight!"));
-      delay(1000);
-      loadCell.tare(TARE_READINGS);
-      Serial.println(F("Tare complete!\n"));
-      break;
+        case 't':
+        case 'T':
+            outputEnabled = false;
+            Serial.println(F("# Taring... remove all load!"));
+            delay(500);
+            loadCell.tare(TARE_READINGS);
+            Serial.println(F("# Tare complete."));
+            startTime = millis();  // Reset timestamp
+            Serial.println(F("# timestamp_ms,force_N"));
+            outputEnabled = true;
+            break;
 
-    case 'r':
-    case 'R':
-      Serial.println(F("\n--- Raw ADC Reading ---"));
-      Serial.print(F("Raw Value: "));
-      Serial.println(loadCell.getRawValue());
-      Serial.print(F("Avg Raw (10): "));
-      Serial.println(loadCell.getAverageRawValue(10));
-      Serial.println();
-      break;
+        case 'r':
+        case 'R':
+            outputEnabled = false;
+            Serial.println(F("# --- Raw ADC Reading ---"));
+            Serial.print(F("# Raw Value: "));
+            Serial.println(loadCell.getRawValue());
+            Serial.print(F("# Avg Raw (10): "));
+            Serial.println(loadCell.getAverageRawValue(10));
+            Serial.println(F("# timestamp_ms,force_N"));
+            outputEnabled = true;
+            break;
 
-    case 'c':
-    case 'C':
-      Serial.print(F("\nCalibration Factor: "));
-      Serial.println(loadCell.getCalibrationFactor());
-      Serial.println();
-      break;
+        case 'p':
+        case 'P':
+            outputEnabled = !outputEnabled;
+            if (outputEnabled) {
+                Serial.println(F("# Output RESUMED"));
+                Serial.println(F("# timestamp_ms,force_N"));
+            } else {
+                Serial.println(F("# Output PAUSED (press 'p' to resume)"));
+            }
+            break;
 
-    case 'h':
-    case 'H':
-    case '?':
-      Serial.println(F("\n=== Commands ==="));
-      Serial.println(F("t - Tare (zero) the scale"));
-      Serial.println(F("r - Show raw ADC reading"));
-      Serial.println(F("c - Show calibration factor"));
-      Serial.println(F("h - Show this help"));
-      Serial.println();
-      break;
+        case 'z':
+        case 'Z':
+            // Zero/reset timestamp
+            startTime = millis();
+            Serial.println(F("# Timestamp reset to 0"));
+            Serial.println(F("# timestamp_ms,force_N"));
+            break;
+
+        case 'c':
+        case 'C': {
+            // Calibration helper
+            outputEnabled = false;
+            Serial.println(F("#"));
+            Serial.println(F("# === CALIBRATION MODE ==="));
+            Serial.println(F("#"));
+            Serial.println(F("# Step 1: Remove all weight from load cell"));
+            Serial.println(F("# Press ENTER when ready..."));
+
+            // Wait for Enter key
+            while (!Serial.available()) delay(10);
+            while (Serial.available()) Serial.read();
+
+            Serial.println(F("# Reading zero point (20 samples)..."));
+            delay(500);  // Allow sensor to settle
+            long rawZero = loadCell.getAverageRawValue(20);
+            Serial.print(F("# Raw (no weight): "));
+            Serial.println(rawZero);
+
+            Serial.println(F("#"));
+            Serial.println(F("# Step 2: Place known weight on load cell"));
+            Serial.println(F("# Then enter the weight in GRAMS (e.g., 500 or 1000):"));
+
+            // Read weight input from serial
+            char inputBuffer[16];
+            uint8_t inputIndex = 0;
+            memset(inputBuffer, 0, sizeof(inputBuffer));
+
+            // Wait for and read numeric input
+            while (true) {
+                if (Serial.available()) {
+                    char c = Serial.read();
+                    // Enter key ends input
+                    if (c == '\r' || c == '\n') {
+                        if (inputIndex > 0) break;  // Only break if we have input
+                    }
+                    // Accept digits and decimal point
+                    else if ((c >= '0' && c <= '9') || c == '.') {
+                        if (inputIndex < sizeof(inputBuffer) - 1) {
+                            inputBuffer[inputIndex++] = c;
+                            Serial.print(c);  // Echo character
+                        }
+                    }
+                }
+                delay(10);
+            }
+            Serial.println();  // New line after input
+
+            // Parse input
+            float weightGrams = atof(inputBuffer);
+
+            // Validate input
+            if (weightGrams <= 0) {
+                Serial.println(F("# ERROR: Invalid weight! Must be > 0"));
+                Serial.println(F("# Calibration aborted."));
+                Serial.println(F("# timestamp_ms,force_N"));
+                outputEnabled = true;
+                break;
+            }
+
+            // Convert grams to Newtons
+            float weightNewtons = weightGrams * GRAMS_TO_NEWTONS;
+
+            Serial.print(F("# Weight entered: "));
+            Serial.print(weightGrams, 1);
+            Serial.print(F(" g = "));
+            Serial.print(weightNewtons, 4);
+            Serial.println(F(" N"));
+
+            Serial.println(F("#"));
+            Serial.println(F("# Reading with weight (20 samples)..."));
+            delay(500);  // Allow sensor to settle
+            long rawWeight = loadCell.getAverageRawValue(20);
+            Serial.print(F("# Raw (with weight): "));
+            Serial.println(rawWeight);
+
+            long rawDiff = rawWeight - rawZero;
+            Serial.print(F("# Raw difference: "));
+            Serial.println(rawDiff);
+
+            // Check for valid difference
+            if (rawDiff == 0) {
+                Serial.println(F("# ERROR: No change detected!"));
+                Serial.println(F("# Check: Is weight actually on the sensor?"));
+                Serial.println(F("# Check: Are wires connected properly?"));
+                Serial.println(F("# Calibration aborted."));
+                Serial.println(F("# timestamp_ms,force_N"));
+                outputEnabled = true;
+                break;
+            }
+
+            // Handle inverted load cell (negative difference)
+            if (rawDiff < 0) {
+                Serial.println(F("# NOTE: Negative difference detected"));
+                Serial.println(F("# Load cell may be mounted inverted (compression mode)"));
+                Serial.println(F("# Using absolute value for calibration"));
+                rawDiff = -rawDiff;
+            }
+
+            // Calculate calibration factor
+            float newCalFactor = (float)rawDiff / weightNewtons;
+
+            Serial.println(F("#"));
+            Serial.println(F("# === CALIBRATION RESULT ==="));
+            Serial.print(F("# New calibration factor: "));
+            Serial.println(newCalFactor, 3);
+            Serial.println(F("#"));
+            Serial.println(F("# To apply, update platformio.ini:"));
+            Serial.print(F("#   -D CALIBRATION_FACTOR="));
+            Serial.println(newCalFactor, 1);
+            Serial.println(F("#"));
+            Serial.println(F("# Or press 'a' now to apply temporarily"));
+            Serial.println(F("# (will reset on power cycle)"));
+
+            // Wait for response
+            unsigned long waitStart = millis();
+            bool applied = false;
+            while (millis() - waitStart < 5000) {  // 5 second timeout
+                if (Serial.available()) {
+                    char response = Serial.read();
+                    if (response == 'a' || response == 'A') {
+                        loadCell.setCalibrationFactor(newCalFactor);
+                        loadCell.tare(TARE_READINGS);
+                        Serial.println(F("# Calibration APPLIED and tared!"));
+                        Serial.print(F("# Active cal factor: "));
+                        Serial.println(loadCell.getCalibrationFactor(), 3);
+                        applied = true;
+                        break;
+                    } else if (response == '\r' || response == '\n') {
+                        break;
+                    }
+                }
+                delay(10);
+            }
+
+            if (!applied) {
+                Serial.println(F("# Calibration NOT applied (update platformio.ini manually)"));
+            }
+
+            Serial.println(F("# === END CALIBRATION ==="));
+            Serial.println(F("#"));
+            Serial.println(F("# timestamp_ms,force_N"));
+            outputEnabled = true;
+            break;
+        }
+
+        case 'h':
+        case 'H':
+        case '?':
+            outputEnabled = false;
+            printHelp();
+            Serial.println(F("# timestamp_ms,force_N"));
+            outputEnabled = true;
+            break;
+
+        case '\r':
+        case '\n':
+            // Ignore newlines
+            break;
+
+        default:
+            // Unknown command - ignore
+            break;
     }
-  }
 }
 
-void runCalibrationMode() {
-  static uint8_t step = 0;
-  static float rawNoWeight = 0;
-  static float rawWithWeight = 0;
-
-  switch (step) {
-  case 0:
-    Serial.println(F("\n=== DIAGNOSTIC: Raw ADC Test ==="));
-    Serial.println(F("Reading raw values 5 times (1 sec apart)..."));
-    for (int i = 0; i < 5; i++) {
-      long raw = loadCell.getRawValue();
-      Serial.print(F("  Raw #"));
-      Serial.print(i + 1);
-      Serial.print(F(": "));
-      Serial.println(raw);
-      delay(1000);
-    }
-    Serial.println();
-    Serial.println(F("=== Step 1: Tare ==="));
-    Serial.println(F("Remove all weight from the load cell."));
-    Serial.println(F("Press ENTER when ready..."));
-    step = 1;
-    break;
-
-  case 1:
-    if (Serial.available()) {
-      // Consume all input (handles \r\n)
-      while (Serial.available())
-        Serial.read();
-      Serial.println(F("Measuring zero point (raw ADC)..."));
-      // Do NOT tare - get actual raw ADC value
-      rawNoWeight = loadCell.getAverageRawValue(20);
-      Serial.print(F("Zero reading: "));
-      Serial.println(rawNoWeight, 0);
-      if (rawNoWeight == 0) {
-        Serial.println(F("ERROR: Got 0 - HX711 communication problem!"));
-        Serial.println(F("Check: DT->GPIO16, SCK->GPIO4, VCC->3.3V, GND->GND"));
-      }
-      Serial.println(F("Done!\n"));
-      step = 2;
-    }
-    break;
-
-  case 2:
-    Serial.println(F("=== Step 2: Known Weight ==="));
-    Serial.print(F("Place a known weight of "));
-    Serial.print(KNOWN_WEIGHT);
-    Serial.println(F(" grams on the scale."));
-    Serial.println(F("Press ENTER when ready..."));
-    step = 3;
-    break;
-
-  case 3:
-    if (Serial.available()) {
-      // Consume all input (handles \r\n)
-      while (Serial.available())
-        Serial.read();
-      Serial.println(F("Measuring known weight (raw ADC)..."));
-      rawWithWeight = loadCell.getAverageRawValue(20);
-      Serial.print(F("Raw reading: "));
-      Serial.println(rawWithWeight, 0);
-      if (rawWithWeight == 0) {
-        Serial.println(F("ERROR: Got 0 - HX711 communication problem!"));
-      }
-      step = 4;
-    }
-    break;
-
-  case 4: {
-    Serial.println(F("\n=== Calibration Complete ==="));
-
-    // Calculate calibration factor from DIFFERENCE
-    float rawDifference = rawWithWeight - rawNoWeight;
-    float calFactor = rawDifference / KNOWN_WEIGHT;
-
-    Serial.print(F("Raw reading (no weight): "));
-    Serial.println(rawNoWeight, 0);
-    Serial.print(F("Raw reading ("));
-    Serial.print(KNOWN_WEIGHT, 0);
-    Serial.print(F("g): "));
-    Serial.println(rawWithWeight, 0);
-    Serial.print(F("Difference: "));
-    Serial.println(rawDifference, 0);
-    Serial.println();
-
-    if (rawDifference == 0 || calFactor == 0) {
-      Serial.println(F("ERROR: Invalid readings - check wiring!"));
-      Serial.println(F("Restarting calibration...\n"));
-      step = 0;
-      break;
-    }
-
-    Serial.println(F("*** YOUR CALIBRATION FACTOR ***"));
-    printSeparator();
-    Serial.print(F("CALIBRATION_FACTOR = "));
-    Serial.println(calFactor, 3);
-    printSeparator();
-    Serial.println();
-
-    Serial.println(F("Update this value in loadcell_config.h:"));
-    Serial.print(F("  #define CALIBRATION_FACTOR "));
-    Serial.println(calFactor, 3);
-    Serial.println();
-
-    Serial.println(F("Or in platformio.ini build_flags:"));
-    Serial.print(F("  -D CALIBRATION_FACTOR="));
-    Serial.println(calFactor, 3);
-    Serial.println();
-
-    // Apply and test
-    Serial.println(F("Testing with new calibration factor..."));
-    loadCell.setCalibrationFactor(calFactor);
-    loadCell.tare(TARE_READINGS);
-
-    Serial.println(F("\nPlace different weights to verify calibration."));
-    Serial.println(F("Readings will update below:\n"));
-
-    step = 5;
-    break;
-  }
-
-  case 5:
-    // Continuous reading mode after calibration
-    loadCell.update();
-
-    static unsigned long lastCalibDisplay = 0;
-    if (millis() - lastCalibDisplay >= 500) {
-      lastCalibDisplay = millis();
-
-      float weight = loadCell.getAverageWeight(READINGS_TO_AVERAGE);
-      Serial.print(F("Weight: "));
-      Serial.print(weight, 2);
-      Serial.print(F(" g"));
-
-      if (loadCell.isStable()) {
-        Serial.print(F(" [STABLE]"));
-      }
-      Serial.println();
-    }
-    break;
-  }
-}
-
-void displayWeight() {
-  float weight = loadCell.getAverageWeight(READINGS_TO_AVERAGE);
-
-  Serial.print(F("Weight: "));
-
-  // Handle negative weights (might indicate reversed wiring)
-  if (weight < -MIN_WEIGHT_THRESHOLD) {
-    Serial.print(weight, 2);
-    Serial.print(F(" g (negative - check wiring or tare)"));
-  }
-  // Filter out noise near zero
-  else if (fabs(weight) < MIN_WEIGHT_THRESHOLD) {
-    Serial.print(F("0.00 g"));
-  }
-  // Normal reading
-  else {
-    Serial.print(weight, 2);
-    Serial.print(F(" g"));
-
-    // Show in kg for larger weights
-    if (weight >= 1000) {
-      Serial.print(F(" ("));
-      Serial.print(weight / 1000.0, 3);
-      Serial.print(F(" kg)"));
-    }
-  }
-
-  // Stability indicator
-  if (loadCell.isStable()) {
-    Serial.print(F(" [STABLE]"));
-  }
-
-  Serial.println();
-}
-
-void displayStabilityStatus() {
-  Serial.println(F("----- Status -----"));
-  Serial.print(F("HX711 Status: "));
-  Serial.println(loadCell.getStatusString());
-  Serial.print(F("Calibration: "));
-  Serial.println(loadCell.getCalibrationFactor());
-  Serial.println(F("------------------"));
-  Serial.println();
-}
-
-void printSeparator() {
-  Serial.println(F("===================================="));
-}
-
-void printWiringGuide() {
-  Serial.println(F("=== Wiring Guide ==="));
-  Serial.println(F("HX711       ESP32"));
-  Serial.println(F("------      -----"));
-  Serial.println(F("VCC    -->  3.3V"));
-  Serial.println(F("GND    -->  GND"));
-  Serial.print(F("DT     -->  GPIO"));
-  Serial.println(LOADCELL_DOUT_PIN);
-  Serial.print(F("SCK    -->  GPIO"));
-  Serial.println(LOADCELL_SCK_PIN);
-  Serial.println();
-  Serial.println(F("Load Cell to HX711:"));
-  Serial.println(F("  Red   (E+) -> E+"));
-  Serial.println(F("  Black (E-) -> E-"));
-  Serial.println(F("  White (A-) -> A-"));
-  Serial.println(F("  Green (A+) -> A+"));
-  Serial.println(F("(Wire colors may vary!)"));
-  Serial.println();
+void printHelp() {
+    Serial.println(F("# === Commands ==="));
+    Serial.println(F("# t - Tare (zero) the sensor"));
+    Serial.println(F("# r - Show raw ADC reading"));
+    Serial.println(F("# p - Pause/resume output"));
+    Serial.println(F("# z - Zero timestamp"));
+    Serial.println(F("# c - Calibration mode (input weight in grams)"));
+    Serial.println(F("# h - Show this help"));
 }
