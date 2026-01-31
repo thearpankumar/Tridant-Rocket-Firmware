@@ -11,7 +11,8 @@ class WebSocketHandler {
             onConnect: null,
             onDisconnect: null,
             onAck: null,
-            onInit: null
+            onInit: null,
+            onClear: null
         };
     }
 
@@ -81,6 +82,13 @@ class WebSocketHandler {
                     console.log('Command acknowledged:', msg.cmd);
                     if (this.callbacks.onAck) {
                         this.callbacks.onAck(msg.cmd);
+                    }
+                    break;
+
+                case 'clear':
+                    console.log('Clear signal received');
+                    if (this.callbacks.onClear) {
+                        this.callbacks.onClear();
                     }
                     break;
 
@@ -166,6 +174,10 @@ class WebSocketHandler {
 
     onAck(callback) {
         this.callbacks.onAck = callback;
+    }
+
+    onClear(callback) {
+        this.callbacks.onClear = callback;
     }
 
     isConnected() {

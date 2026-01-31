@@ -77,9 +77,9 @@ void setup() {
     Serial.println(F("# Starting Web Dashboard..."));
     if (dashboard.beginAP()) {
         Serial.println(F("# Dashboard ready at http://192.168.4.1"));
-        // Register tare callback
+        // Register tare callback (use fewer readings to avoid blocking WebSocket)
         dashboard.onTare([]() {
-            loadCell.tare(TARE_READINGS);
+            loadCell.tare(5);  // Quick tare for web (vs 20 for serial)
             startTime = millis();
         });
         // Register calibrate callback

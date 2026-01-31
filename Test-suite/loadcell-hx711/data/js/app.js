@@ -143,12 +143,15 @@ class ThrustDashboard {
                     this.updateRecordingUI();
                     break;
                 case 'reset':
-                    this.resetLocal();
-                    break;
                 case 'tare':
-                    this.resetLocal();
+                    // Chart already cleared by 'clear' message
                     break;
             }
+        });
+
+        // Handle clear signal (sent before tare/reset completes)
+        wsHandler.onClear(() => {
+            this.resetLocal();
         });
 
         // Connect
