@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Thrust Test Dashboard</title>
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <script src="/js/apexcharts.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg class="rocket-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L8 8l-4 2 1 6 3 4h8l3-4 1-6-4-2-4-6z"/>
+                    <circle cx="12" cy="10" r="2"/>
+                    <path d="M10 22l2-4 2 4"/>
+                </svg>
+                <h1>Thrust Test</h1>
+            </div>
+            <div class="connection-status" id="connectionStatus">
+                <span class="status-dot"></span>
+                <span class="status-text">Disconnected</span>
+            </div>
+        </header>
+
+        <!-- Main Chart -->
+        <section class="chart-section">
+            <div class="chart-container">
+                <div id="thrustChart"></div>
+            </div>
+        </section>
+
+        <!-- Metrics Grid -->
+        <section class="metrics-section">
+            <div class="metrics-grid">
+                <div class="metric-card primary">
+                    <div class="metric-label">Current Thrust</div>
+                    <div class="metric-value" id="currentThrust">0.00</div>
+                    <div class="metric-unit">N</div>
+                </div>
+                <div class="metric-card highlight">
+                    <div class="metric-label">Peak Thrust</div>
+                    <div class="metric-value" id="peakThrust">0.00</div>
+                    <div class="metric-unit">N</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Total Impulse</div>
+                    <div class="metric-value" id="totalImpulse">0.00</div>
+                    <div class="metric-unit">Ns</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Burn Time</div>
+                    <div class="metric-value" id="burnTime">0.00</div>
+                    <div class="metric-unit">s</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Average Thrust</div>
+                    <div class="metric-value" id="avgThrust">0.00</div>
+                    <div class="metric-unit">N</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Samples</div>
+                    <div class="metric-value" id="sampleCount">0</div>
+                    <div class="metric-unit">count</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Controls -->
+        <section class="controls-section">
+            <div class="control-group primary-controls">
+                <button class="btn btn-tare" id="btnTare">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v20M2 12h20"/>
+                    </svg>
+                    TARE
+                </button>
+                <button class="btn btn-start" id="btnStartStop">
+                    <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5,3 19,12 5,21"/>
+                    </svg>
+                    <svg class="icon-stop hidden" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="6" width="12" height="12"/>
+                    </svg>
+                    <span class="btn-text">START</span>
+                </button>
+                <button class="btn btn-reset" id="btnReset">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/>
+                    </svg>
+                    RESET
+                </button>
+            </div>
+
+            <div class="control-group secondary-controls">
+                <button class="btn btn-export" id="btnExport">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="7,10 12,15 17,10"/>
+                        <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                    EXPORT CSV
+                </button>
+            </div>
+
+            <div class="control-group calibration-controls">
+                <div class="calibration-input">
+                    <input type="number" id="calibrationWeight" placeholder="Weight (g)" min="1" step="1">
+                    <button class="btn btn-calibrate" id="btnCalibrate">CALIBRATE</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span>Thrust Test Dashboard v1.0</span>
+            <span class="separator">|</span>
+            <span id="ipAddress">192.168.4.1</span>
+        </footer>
+    </div>
+
+    <script src="/js/websocket.js"></script>
+    <script src="/js/chart.js"></script>
+    <script src="/js/metrics.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

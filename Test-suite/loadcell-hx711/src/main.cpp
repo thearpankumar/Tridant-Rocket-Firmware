@@ -2,8 +2,24 @@
 #include "loadcell_config.h"
 #include <Arduino.h>
 
+#ifdef ENABLE_WEB_DASHBOARD
+#include "WebDashboard.h"
+#endif
+
+#ifdef ENABLE_TEENSY_UART
+#include "TeensyUART.h"
+#endif
+
 // ===== Global Objects =====
 LoadCellModule loadCell;
+
+#ifdef ENABLE_WEB_DASHBOARD
+WebDashboard dashboard;
+#endif
+
+#ifdef ENABLE_TEENSY_UART
+TeensyUART teensyUart;
+#endif
 
 // ===== Timing =====
 unsigned long startTime = 0;
@@ -56,6 +72,36 @@ void setup() {
     Serial.println(F("# Tare complete."));
     Serial.println(F("#"));
 
+#ifdef ENABLE_WEB_DASHBOARD
+    // Initialize web dashboard (AP mode)
+    Serial.println(F("# Starting Web Dashboard..."));
+    if (dashboard.beginAP()) {
+        Serial.println(F("# Dashboard ready at http://192.168.4.1"));
+        // Register tare callback
+        dashboard.onTare([]() {
+            loadCell.tare(TARE_READINGS);
+            startTime = millis();
+        });
+        // Register calibrate callback
+        dashboard.onCalibrate([](float weightGrams) {
+            float weightNewtons = weightGrams * GRAMS_TO_NEWTONS;
+            Serial.print(F("# Web calibrate: "));
+            Serial.print(weightGrams);
+            Serial.println(F(" g"));
+            // Note: Full calibration requires raw readings at zero and with weight
+        });
+    } else {
+        Serial.println(F("# Dashboard failed to start"));
+    }
+    Serial.println(F("#"));
+#endif
+
+#ifdef ENABLE_TEENSY_UART
+    // Initialize Teensy UART communication
+    teensyUart.begin();
+    Serial.println(F("#"));
+#endif
+
     printHelp();
 
     Serial.println(F("#"));
@@ -70,15 +116,25 @@ void loop() {
     handleSerialCommands();
 
     // Read and output at maximum rate (80Hz = ~12.5ms per sample)
-    if (outputEnabled) {
-        ThrustData data;
-        if (loadCell.readIfReady(data) && data.valid) {
+    ThrustData data;
+    if (loadCell.readIfReady(data) && data.valid) {
+        if (outputEnabled) {
             // CSV output: timestamp_ms,force_N
             unsigned long relativeTime = data.timestamp - startTime;
             Serial.print(relativeTime);
             Serial.print(',');
             Serial.println(data.forceNewtons, 3);
         }
+
+#ifdef ENABLE_WEB_DASHBOARD
+        // Stream data to web dashboard
+        dashboard.sendThrustData(data.forceNewtons, data.timestamp);
+#endif
+
+#ifdef ENABLE_TEENSY_UART
+        // Stream data to Teensy via UART
+        teensyUart.sendThrustData(data.forceNewtons, data.timestamp - startTime);
+#endif
     }
 }
 

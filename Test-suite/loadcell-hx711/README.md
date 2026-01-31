@@ -1,11 +1,19 @@
-# HX711 Load Cell Module - ESP32
+# HX711 Load Cell Module - ESP32 Thrust Test System
 
-This project provides firmware for reading weight measurements from a load cell using the HX711 24-bit ADC amplifier with an ESP32 development board.
+High-speed (80Hz) thrust measurement system for rocket motor testing with real-time web dashboard.
+
+## Features
+
+- **80Hz Sampling Rate** - High-speed data acquisition for accurate thrust curves
+- **Real-time Web Dashboard** - Beautiful dark-themed visualization accessible via WiFi
+- **Live Metrics** - Peak thrust, total impulse, burn time, average thrust
+- **CSV Export** - Download test data directly from browser
+- **Offline Operation** - Works in AP mode without internet connection
 
 ## Hardware Requirements
 
 - ESP32 Dev Board (ESP32-WROOM-32)
-- HX711 Load Cell Amplifier Module
+- HX711 Load Cell Amplifier Module (RATE pin set to HIGH for 80Hz)
 - Load Cell (strain gauge type, 4-wire)
 - Jumper wires
 
@@ -29,115 +37,106 @@ This project provides firmware for reading weight measurements from a load cell 
 | White | A- | Signal negative |
 | Green | A+ | Signal positive |
 
-> **Note:** Wire colors may vary between manufacturers. Common alternatives:
-> - Red/Black for excitation (power)
-> - White/Green or Blue/Yellow for signal
->
-> If readings are negative, try swapping A+ and A- connections.
+> **Note:** Wire colors may vary between manufacturers. If readings are negative, try swapping A+ and A- connections.
 
-## Wiring Diagram
+### 80Hz Mode Setup
 
-```
-                    +-----------+
-                    |   ESP32   |
-                    |           |
-    +-------+       |   3.3V ---+--- VCC
-    | Load  |       |    GND ---+--- GND     +-------+
-    | Cell  |------>|  GPIO16 --+--- DT      | HX711 |
-    |       |       |   GPIO4 --+--- SCK     +-------+
-    +-------+       |           |                |
-        |           +-----------+                |
-        |                                        |
-        +---- Red (E+) --------------------------+
-        +---- Black (E-) ------------------------+
-        +---- White (A-) ------------------------+
-        +---- Green (A+) ------------------------+
-```
+**IMPORTANT:** For 80Hz operation, modify your HX711 board:
+- Locate the RATE pin jumper on the HX711 module
+- Either: cut trace to GND, or bridge RATE to VCC
+- This enables 80Hz instead of default 10Hz
 
-## Software Setup
+## Quick Start
 
-### Prerequisites
-
-- [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
-- USB driver for ESP32 (CP2102 or CH340 depending on your board)
-
-### Building and Uploading
+### 1. Build and Upload
 
 ```bash
-# Build the project
+# Build firmware
 pio run
 
-# Upload to ESP32
+# Upload firmware to ESP32
 pio run -t upload
 
-# Monitor serial output
-pio device monitor
+# Upload web dashboard files
+pio run -t uploadfs
 ```
 
-Or use the combined command:
-```bash
-pio run -t upload && pio device monitor
-```
+### 2. Connect to Dashboard
 
-## Calibration
+1. Power on the ESP32
+2. Connect to WiFi network: **ThrustTest** (password: `rocket123`)
+3. Open browser and navigate to: **http://192.168.4.1**
 
-Before using the scale for accurate measurements, you must calibrate it with a known weight.
+### 3. Run a Thrust Test
 
-### Step 1: Enable Calibration Mode
+1. Click **TARE** to zero the sensor (ensure no load)
+2. Click **START** to begin recording
+3. Fire your motor
+4. Click **STOP** when test complete
+5. Click **EXPORT CSV** to download data
 
-Edit `src/main.cpp` and change:
-```cpp
-#define CALIBRATION_MODE false
-```
-to:
-```cpp
-#define CALIBRATION_MODE true
-```
+## Web Dashboard
 
-Also set your known calibration weight:
-```cpp
-#define KNOWN_WEIGHT 100.0  // Change to your known weight in grams
-```
+### Live Metrics
 
-### Step 2: Run Calibration
+| Metric | Description | Unit |
+|--------|-------------|------|
+| Current Thrust | Real-time reading | N |
+| Peak Thrust | Maximum achieved | N |
+| Total Impulse | Area under thrust curve | Ns |
+| Burn Time | Duration above 5% peak | s |
+| Average Thrust | Mean during burn | N |
+| Samples | Data points collected | count |
 
-1. Upload the firmware and open the serial monitor
-2. Remove all weight from the load cell and press ENTER
-3. Place your known weight on the scale and press ENTER
-4. Note the calibration factor displayed
+### Controls
 
-### Step 3: Apply Calibration Factor
+| Button | Function |
+|--------|----------|
+| TARE | Zero the sensor |
+| START/STOP | Begin/end recording session |
+| RESET | Clear all data and metrics |
+| EXPORT CSV | Download test data |
+| CALIBRATE | Calibrate with known weight |
 
-Update the calibration factor in `include/loadcell_config.h`:
-```cpp
-#define CALIBRATION_FACTOR -471.497  // Replace with your value
-```
+### Dashboard Features
 
-Or add it to `platformio.ini` build flags:
-```ini
-build_flags =
-    -D CALIBRATION_FACTOR=-471.497
-```
-
-### Step 4: Disable Calibration Mode
-
-Change back to normal mode:
-```cpp
-#define CALIBRATION_MODE false
-```
-
-Rebuild and upload.
+- Real-time thrust curve with ApexCharts
+- Peak marker annotation on chart
+- 80Hz data streaming via WebSocket
+- Mobile-responsive dark theme
+- Works offline (AP mode)
 
 ## Serial Commands
 
-During normal operation, you can send these commands via serial monitor:
+Commands available via serial monitor (921600 baud):
 
 | Command | Description |
 |---------|-------------|
-| `t` or `T` | Tare (zero) the scale |
-| `r` or `R` | Show raw ADC reading |
-| `c` or `C` | Show calibration factor |
-| `h` or `H` | Show help menu |
+| `t` / `T` | Tare (zero) the sensor |
+| `r` / `R` | Show raw ADC reading |
+| `p` / `P` | Pause/resume output |
+| `z` / `Z` | Reset timestamp to 0 |
+| `c` / `C` | Enter calibration mode |
+| `h` / `H` | Show help |
+
+## Calibration
+
+### Via Serial (Recommended)
+
+1. Open serial monitor at 921600 baud
+2. Press `c` to enter calibration mode
+3. Follow prompts: remove weight → press Enter → add known weight → enter weight in grams
+4. Note the calibration factor
+5. Update `platformio.ini`:
+   ```ini
+   -D CALIBRATION_FACTOR=YOUR_VALUE
+   ```
+
+### Via Web Dashboard
+
+1. Enter known weight in grams in the calibration input
+2. Click CALIBRATE
+3. Follow serial output for new calibration factor
 
 ## Project Structure
 
@@ -146,66 +145,109 @@ loadcell-hx711/
 ├── platformio.ini              # PlatformIO configuration
 ├── README.md                   # This file
 ├── include/
-│   └── loadcell_config.h       # Configuration and constants
+│   ├── loadcell_config.h       # Load cell configuration
+│   └── wifi_config.h           # WiFi/dashboard configuration
 ├── lib/
-│   └── LoadCellModule/         # Custom load cell library
-│       ├── LoadCellModule.h
-│       └── LoadCellModule.cpp
+│   ├── LoadCellModule/         # Load cell driver
+│   │   ├── LoadCellModule.h
+│   │   └── LoadCellModule.cpp
+│   └── WebDashboard/           # Web dashboard module
+│       ├── WebDashboard.h
+│       ├── WebDashboard.cpp
+│       └── ThrustMetrics.h
+├── data/                       # Web assets (LittleFS)
+│   ├── index.html
+│   ├── css/
+│   │   └── dashboard.css
+│   └── js/
+│       ├── apexcharts.js       # Charting library
+│       ├── app.js              # Main application
+│       ├── chart.js            # Chart configuration
+│       ├── websocket.js        # WebSocket handler
+│       └── metrics.js          # Metrics display
 └── src/
     └── main.cpp                # Main application
 ```
 
-## Configuration Options
+## Configuration
 
-Edit `include/loadcell_config.h` to customize:
+### platformio.ini Build Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `CALIBRATION_FACTOR` | 1500.0 | Load cell calibration factor |
+| `LOADCELL_DOUT_PIN` | 16 | HX711 data pin |
+| `LOADCELL_SCK_PIN` | 4 | HX711 clock pin |
+| `ENABLE_WEB_DASHBOARD` | defined | Enable/disable web dashboard |
+
+### WiFi Configuration (wifi_config.h)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `CALIBRATION_FACTOR` | -471.497 | Scale calibration factor |
-| `READINGS_TO_AVERAGE` | 10 | Number of readings for averaging |
-| `DISPLAY_INTERVAL` | 1000 | Weight display interval (ms) |
-| `STABILITY_THRESHOLD` | 0.5 | Stability detection threshold (g) |
-| `STABILITY_SAMPLES` | 5 | Samples for stability check |
-| `MIN_WEIGHT_THRESHOLD` | 0.5 | Noise filter threshold (g) |
-| `TARE_READINGS` | 20 | Readings for tare operation |
+| `WIFI_AP_SSID` | "ThrustTest" | WiFi network name |
+| `WIFI_AP_PASSWORD` | "rocket123" | WiFi password |
+| `WS_DATA_RATE_HZ` | 80 | WebSocket data rate |
+| `WS_METRICS_RATE_HZ` | 4 | Metrics update rate |
 
-## HX711 Specifications
+### Disabling Web Dashboard
 
-| Parameter | Value |
-|-----------|-------|
-| Input Voltage | 2.6V - 5.5V |
-| Operating Current | < 1.5mA |
-| Power Down Current | < 1uA |
-| Data Rate | 10Hz or 80Hz |
-| Resolution | 24-bit ADC |
-| Gain (Channel A) | 128 or 64 |
-| Gain (Channel B) | 32 |
+To disable the web dashboard and reduce firmware size:
 
-## Troubleshooting
+1. Comment out in `platformio.ini`:
+   ```ini
+   ; -D ENABLE_WEB_DASHBOARD
+   ```
+2. Rebuild: `pio run`
 
-### No readings / HX711 not responding
-- Check power connections (VCC and GND)
-- Verify DT and SCK pins are connected correctly
-- Ensure load cell is properly wired to HX711
+## WebSocket Protocol
 
-### Negative readings
-- Swap A+ and A- connections on the HX711
-- Or change the sign of your calibration factor
+### ESP32 → Browser (80Hz data)
+```json
+{"type":"data","t":12345,"f":125.430}
+```
 
-### Unstable/noisy readings
-- Increase `READINGS_TO_AVERAGE` for more smoothing
-- Check for loose connections
-- Ensure load cell is mounted securely
-- Keep wires away from interference sources
+### ESP32 → Browser (4Hz metrics)
+```json
+{"type":"metrics","peak":342.5,"impulse":128.7,"burn":2.45,"avg":52.3,"samples":196,"recording":true}
+```
 
-### Readings drift over time
-- Allow the HX711 to warm up for a few minutes
-- Re-tare the scale periodically
-- Check for temperature changes affecting the load cell
+### Browser → ESP32 (commands)
+```json
+{"cmd":"tare"}
+{"cmd":"start"}
+{"cmd":"stop"}
+{"cmd":"reset"}
+{"cmd":"calibrate","value":500}
+```
 
 ## Dependencies
 
-- [bogde/HX711](https://github.com/bogde/HX711) - Arduino library for HX711
+- [bogde/HX711](https://github.com/bogde/HX711) - HX711 driver
+- [mathieucarbou/ESPAsyncWebServer](https://github.com/mathieucarbou/ESPAsyncWebServer) - Async web server
+- [bblanchon/ArduinoJson](https://github.com/bblanchon/ArduinoJson) - JSON parsing
+- [ApexCharts](https://apexcharts.com/) - Real-time charting (bundled)
+
+## Troubleshooting
+
+### Dashboard not loading
+- Ensure you uploaded filesystem: `pio run -t uploadfs`
+- Check you're connected to "ThrustTest" WiFi
+- Try http://192.168.4.1 (not https)
+
+### No data on chart
+- Verify HX711 wiring
+- Check serial output for errors
+- Ensure RATE pin is HIGH for 80Hz
+
+### Unstable readings
+- Check load cell mounting
+- Verify wiring connections
+- Allow warmup time before testing
+
+### WebSocket disconnects
+- Move closer to ESP32
+- Check for WiFi interference
+- Reduce number of connected clients
 
 ## License
 
