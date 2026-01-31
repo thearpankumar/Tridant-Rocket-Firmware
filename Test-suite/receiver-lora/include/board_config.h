@@ -4,12 +4,18 @@
 // Pin definitions are provided via build flags in platformio.ini
 // This header validates that all required pins are defined at compile time
 
-#ifndef LORA_NSS
-    #error "LORA_NSS not defined. Check platformio.ini build_flags"
+// ===== Module Type Validation =====
+#if !defined(LORA_MODULE_SX1262) && !defined(LORA_MODULE_RA02)
+    #error "LORA_MODULE type not defined. Use -D LORA_MODULE_RA02 or -D LORA_MODULE_SX1262"
 #endif
 
-#ifndef LORA_DIO0
-    #error "LORA_DIO0 not defined. Check platformio.ini build_flags"
+#if defined(LORA_MODULE_SX1262) && defined(LORA_MODULE_RA02)
+    #error "Only one LORA_MODULE type can be defined"
+#endif
+
+// ===== Common Pin Validation =====
+#ifndef LORA_NSS
+    #error "LORA_NSS not defined. Check platformio.ini build_flags"
 #endif
 
 #ifndef LORA_RESET
@@ -22,6 +28,22 @@
 
 #ifndef BOARD_NAME
     #error "BOARD_NAME not defined. Check platformio.ini build_flags"
+#endif
+
+// ===== Module-Specific Pin Validation =====
+#if defined(LORA_MODULE_SX1262)
+    // SX1262 requires DIO1 and BUSY pins
+    #ifndef LORA_DIO1
+        #error "LORA_DIO1 required for SX1262. Check platformio.ini build_flags"
+    #endif
+    #ifndef LORA_BUSY
+        #error "LORA_BUSY required for SX1262. Check platformio.ini build_flags"
+    #endif
+#else
+    // Ra-02 (SX1278) requires DIO0 pin
+    #ifndef LORA_DIO0
+        #error "LORA_DIO0 required for Ra-02/SX1278. Check platformio.ini build_flags"
+    #endif
 #endif
 
 #ifndef LED_PIN
