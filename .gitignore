@@ -13,6 +13,9 @@ downloads/
 eggs/
 .eggs/
 lib/
+# But track PlatformIO custom project libraries in Test-suite
+!Test-suite/*/lib/
+!Test-suite/*/lib/*/
 lib64/
 parts/
 sdist/
