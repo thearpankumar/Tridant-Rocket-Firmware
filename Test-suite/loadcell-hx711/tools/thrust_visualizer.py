@@ -356,30 +356,28 @@ def create_data_table(df: pd.DataFrame) -> dash_table.DataTable:
     return dash_table.DataTable(
         data=display_df.to_dict('records'),
         columns=[{'name': col, 'id': col} for col in display_df.columns],
-        # Virtualization for large datasets
-        virtualization=True,
         fixed_rows={'headers': True},
         style_table={
             'overflowX': 'auto',
-            'height': 'calc(100vh - 250px)',
-            'minHeight': '400px'
+            'overflowY': 'scroll',
+            'height': 'calc(100vh - 130px)',
+            'maxHeight': 'calc(100vh - 130px)',
         },
         style_header={
             'backgroundColor': '#16213e',
             'color': '#00d4aa',
             'fontWeight': 'bold',
             'border': '1px solid #333',
-            'position': 'sticky',
-            'top': 0
+            'padding': '10px',
         },
         style_cell={
             'backgroundColor': '#1a1a2e',
             'color': '#ddd',
             'border': '1px solid #333',
             'textAlign': 'center',
-            'padding': '10px',
-            'minWidth': '100px',
-            'maxWidth': '180px'
+            'padding': '8px 10px',
+            'minWidth': '120px',
+            'width': '20%',
         },
         style_data_conditional=[
             {
@@ -391,7 +389,7 @@ def create_data_table(df: pd.DataFrame) -> dash_table.DataTable:
         filter_action='native',
         sort_action='native',
         sort_mode='multi',
-        page_action='none'  # Disable pagination, use virtualization instead
+        page_action='none'
     )
 
 
@@ -424,110 +422,140 @@ def create_app(initial_file: str = None) -> Dash:
             print(f"Error loading file: {e}")
             initial_file_info = f'Error: {str(e)}'
 
+    # Sidebar styles
+    SIDEBAR_VISIBLE = {
+        'width': '280px',
+        'minWidth': '280px',
+        'padding': '20px',
+        'backgroundColor': '#0f0f23',
+        'borderRight': '1px solid #333',
+        'height': 'calc(100vh - 60px)',
+        'overflowY': 'auto',
+        'transition': 'all 0.3s ease',
+        'overflowX': 'hidden'
+    }
+
+    SIDEBAR_HIDDEN = {
+        'width': '0px',
+        'minWidth': '0px',
+        'padding': '0px',
+        'backgroundColor': '#0f0f23',
+        'borderRight': '0px solid #333',
+        'height': 'calc(100vh - 60px)',
+        'overflowY': 'hidden',
+        'transition': 'all 0.3s ease',
+        'overflowX': 'hidden'
+    }
+
     # App Layout
     app.layout = html.Div([
-        # Header
+        # Header with toggle button
         html.Div([
-            html.H1('Thrust Test Data Visualizer',
-                   style={'margin': '0', 'color': '#00d4aa'}),
-            html.P('Interactive analysis of ESP32/Teensy thrust measurements',
-                  style={'margin': '5px 0 0 0', 'color': '#888'})
-        ], style={'padding': '20px', 'backgroundColor': '#0f0f23', 'borderBottom': '2px solid #00d4aa'}),
+            html.Div([
+                html.Button(
+                    id='sidebar-toggle',
+                    children='☰',
+                    n_clicks=0,
+                    style={
+                        'backgroundColor': 'transparent',
+                        'border': '1px solid #00d4aa',
+                        'color': '#00d4aa',
+                        'fontSize': '20px',
+                        'padding': '5px 12px',
+                        'borderRadius': '5px',
+                        'cursor': 'pointer',
+                        'marginRight': '15px'
+                    }
+                ),
+                html.H1('Thrust Test Data Visualizer',
+                       style={'margin': '0', 'color': '#00d4aa', 'display': 'inline-block', 'verticalAlign': 'middle'}),
+            ], style={'display': 'flex', 'alignItems': 'center'}),
+            html.Div(id='file-info', children=initial_file_info,
+                    style={'color': '#00d4aa' if initial_file_info else '#888', 'fontSize': '12px', 'marginTop': '5px'})
+        ], style={'padding': '10px 20px', 'backgroundColor': '#0f0f23', 'borderBottom': '2px solid #00d4aa'}),
 
         # Main container
         html.Div([
-            # Left panel - Controls & Stats
-            html.Div([
-                # File Upload (collapsible)
-                html.Details([
-                    html.Summary('Data Source', style={
-                        'color': '#00d4aa',
-                        'cursor': 'pointer',
-                        'fontWeight': 'bold',
-                        'fontSize': '16px',
-                        'marginBottom': '10px'
-                    }),
-                    dcc.Upload(
-                        id='upload-data',
-                        children=html.Div([
-                            'Drag & Drop or ',
-                            html.A('Select File', style={'color': '#00d4aa', 'cursor': 'pointer'})
-                        ]),
-                        style={
-                            'width': '100%',
-                            'height': '60px',
-                            'lineHeight': '60px',
-                            'borderWidth': '2px',
-                            'borderStyle': 'dashed',
-                            'borderRadius': '10px',
-                            'borderColor': '#444',
-                            'textAlign': 'center',
-                            'backgroundColor': '#1a1a2e',
-                            'color': '#888'
-                        },
-                        multiple=False
-                    ),
-                    html.Div(id='file-info', children=initial_file_info, style={'marginTop': '10px', 'color': '#00d4aa' if initial_file_info else '#888', 'fontSize': '12px'})
-                ], open=not bool(initial_file_info), style={'marginBottom': '20px'}),
+            # Left panel - Controls & Stats (collapsible sidebar)
+            html.Div(
+                id='sidebar',
+                children=[
+                    # File Upload
+                    html.Div([
+                        html.H3('Data Source', style={'color': '#00d4aa', 'marginTop': '0'}),
+                        dcc.Upload(
+                            id='upload-data',
+                            children=html.Div([
+                                'Drag & Drop or ',
+                                html.A('Select File', style={'color': '#00d4aa', 'cursor': 'pointer'})
+                            ]),
+                            style={
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '2px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '10px',
+                                'borderColor': '#444',
+                                'textAlign': 'center',
+                                'backgroundColor': '#1a1a2e',
+                                'color': '#888'
+                            },
+                            multiple=False
+                        ),
+                    ], style={'marginBottom': '20px'}),
 
-                # Filters
-                html.Div([
-                    html.H3('Display Options', style={'color': '#00d4aa'}),
-                    dcc.Checklist(
-                        id='show-invalid',
-                        options=[{'label': ' Show Invalid Data Points', 'value': 'show'}],
-                        value=[],
-                        style={'color': '#ddd', 'marginBottom': '10px'}
-                    ),
-                    dcc.Checklist(
-                        id='use-absolute',
-                        options=[{'label': ' Use Absolute Values (for compression load cells)', 'value': 'abs'}],
-                        value=['abs'],  # Default ON since load cell reads negative for thrust
-                        style={'color': '#ddd'}
-                    )
-                ], style={'marginBottom': '20px'}),
+                    # Display Options
+                    html.Div([
+                        html.H3('Display Options', style={'color': '#00d4aa'}),
+                        dcc.Checklist(
+                            id='show-invalid',
+                            options=[{'label': ' Show Invalid Points', 'value': 'show'}],
+                            value=[],
+                            style={'color': '#ddd', 'marginBottom': '10px'}
+                        ),
+                        dcc.Checklist(
+                            id='use-absolute',
+                            options=[{'label': ' Absolute Values', 'value': 'abs'}],
+                            value=['abs'],
+                            style={'color': '#ddd'}
+                        )
+                    ], style={'marginBottom': '20px'}),
 
-                # Statistics Panel
-                html.Div([
-                    html.H3('Statistics', style={'color': '#00d4aa'}),
-                    html.Div(id='stats-panel', children=create_stats_panel(initial_stats))
-                ], style={'marginBottom': '20px'}),
+                    # Statistics Panel
+                    html.Div([
+                        html.H3('Statistics', style={'color': '#00d4aa'}),
+                        html.Div(id='stats-panel', children=create_stats_panel(initial_stats))
+                    ], style={'marginBottom': '20px'}),
 
-                # Export Options
-                html.Div([
-                    html.H3('Export', style={'color': '#00d4aa'}),
-                    html.Button('Download CSV', id='btn-csv', n_clicks=0,
-                               style={'marginRight': '10px', 'padding': '10px 20px',
-                                     'backgroundColor': '#00d4aa', 'border': 'none',
-                                     'borderRadius': '5px', 'cursor': 'pointer',
-                                     'color': '#1a1a2e', 'fontWeight': 'bold'}),
-                    html.Button('Download HTML', id='btn-html', n_clicks=0,
-                               style={'padding': '10px 20px',
-                                     'backgroundColor': '#ffa502', 'border': 'none',
-                                     'borderRadius': '5px', 'cursor': 'pointer',
-                                     'color': '#1a1a2e', 'fontWeight': 'bold'}),
-                    dcc.Download(id='download-csv'),
-                    dcc.Download(id='download-html')
-                ])
-
-            ], style={
-                'width': '280px',
-                'padding': '20px',
-                'backgroundColor': '#0f0f23',
-                'borderRight': '1px solid #333',
-                'height': 'calc(100vh - 100px)',
-                'overflowY': 'auto'
-            }),
+                    # Export Options
+                    html.Div([
+                        html.H3('Export', style={'color': '#00d4aa'}),
+                        html.Button('CSV', id='btn-csv', n_clicks=0,
+                                   style={'marginRight': '10px', 'padding': '8px 16px',
+                                         'backgroundColor': '#00d4aa', 'border': 'none',
+                                         'borderRadius': '5px', 'cursor': 'pointer',
+                                         'color': '#1a1a2e', 'fontWeight': 'bold'}),
+                        html.Button('HTML', id='btn-html', n_clicks=0,
+                                   style={'padding': '8px 16px',
+                                         'backgroundColor': '#ffa502', 'border': 'none',
+                                         'borderRadius': '5px', 'cursor': 'pointer',
+                                         'color': '#1a1a2e', 'fontWeight': 'bold'}),
+                        dcc.Download(id='download-csv'),
+                        dcc.Download(id='download-html')
+                    ])
+                ],
+                style=SIDEBAR_HIDDEN if initial_file_info else SIDEBAR_VISIBLE
+            ),
 
             # Right panel - Graph & Table
             html.Div([
-                # Tabs for Graph and Table
-                dcc.Tabs([
+                dcc.Tabs(id='main-tabs', children=[
                     dcc.Tab(label='Graph', children=[
                         dcc.Graph(
                             id='thrust-graph',
                             figure=create_thrust_figure(initial_df),
-                            style={'height': 'calc(100vh - 200px)'},
+                            style={'height': 'calc(100vh - 110px)'},
                             config={
                                 'displayModeBar': True,
                                 'displaylogo': False,
@@ -541,27 +569,30 @@ def create_app(initial_file: str = None) -> Dash:
                                 }
                             }
                         )
-                    ], style={'backgroundColor': '#1a1a2e', 'color': '#ddd'},
+                    ], className='tab-content', style={'backgroundColor': '#1a1a2e', 'color': '#ddd'},
                        selected_style={'backgroundColor': '#16213e', 'color': '#00d4aa', 'borderTop': '2px solid #00d4aa'}),
 
                     dcc.Tab(label='Data Table', children=[
-                        html.Div(id='data-table-container', children=create_data_table(initial_df), style={'padding': '20px'})
-                    ], style={'backgroundColor': '#1a1a2e', 'color': '#ddd'},
+                        html.Div(id='data-table-container', children=create_data_table(initial_df),
+                                style={'height': 'calc(100vh - 110px)', 'overflow': 'auto'})
+                    ], className='tab-content', style={'backgroundColor': '#1a1a2e', 'color': '#ddd'},
                        selected_style={'backgroundColor': '#16213e', 'color': '#00d4aa', 'borderTop': '2px solid #00d4aa'})
                 ], style={'backgroundColor': '#0f0f23'})
             ], style={
                 'flex': '1',
                 'backgroundColor': '#1a1a2e',
-                'overflow': 'hidden'
+                'overflow': 'hidden',
+                'transition': 'all 0.3s ease'
             })
 
         ], style={
             'display': 'flex',
-            'height': 'calc(100vh - 100px)'
+            'height': 'calc(100vh - 60px)'
         }),
 
-        # Hidden store for data
-        dcc.Store(id='stored-data', data=initial_df.to_json(orient='split') if not initial_df.empty else None)
+        # Hidden stores
+        dcc.Store(id='stored-data', data=initial_df.to_json(orient='split') if not initial_df.empty else None),
+        dcc.Store(id='sidebar-state', data={'visible': not bool(initial_file_info)})
 
     ], style={
         'fontFamily': 'monospace',
@@ -579,6 +610,49 @@ def create_app(initial_file: str = None) -> Dash:
 
 def register_callbacks(app: Dash):
     """Register all Dash callbacks."""
+
+    # Sidebar styles for toggle
+    SIDEBAR_VISIBLE = {
+        'width': '280px',
+        'minWidth': '280px',
+        'padding': '20px',
+        'backgroundColor': '#0f0f23',
+        'borderRight': '1px solid #333',
+        'height': 'calc(100vh - 60px)',
+        'overflowY': 'auto',
+        'transition': 'all 0.3s ease',
+        'overflowX': 'hidden'
+    }
+
+    SIDEBAR_HIDDEN = {
+        'width': '0px',
+        'minWidth': '0px',
+        'padding': '0px',
+        'backgroundColor': '#0f0f23',
+        'borderRight': '0px solid #333',
+        'height': 'calc(100vh - 60px)',
+        'overflowY': 'hidden',
+        'transition': 'all 0.3s ease',
+        'overflowX': 'hidden'
+    }
+
+    @app.callback(
+        [Output('sidebar', 'style'),
+         Output('sidebar-state', 'data')],
+        Input('sidebar-toggle', 'n_clicks'),
+        State('sidebar-state', 'data')
+    )
+    def toggle_sidebar(n_clicks, state):
+        if n_clicks is None or n_clicks == 0:
+            return no_update, no_update
+
+        is_visible = state.get('visible', True)
+        new_visible = not is_visible
+
+        return (
+            SIDEBAR_VISIBLE if new_visible else SIDEBAR_HIDDEN,
+            {'visible': new_visible}
+        )
 
     @app.callback(
         [Output('stored-data', 'data'),
